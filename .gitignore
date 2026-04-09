@@ -1,38 +1,102 @@
 .DS_Store
 Thumbs.db
 
-# Python
+# Python bytecode and extensions
 __pycache__/
 *.py[cod]
+*$py.class
 *.pyo
 *.pyd
 *.so
+
+# Packaging and build artifacts
+.Python
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Test, coverage, and tooling caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+.cache/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
-dist/
-build/
-*.egg-info/
+cover/
+coverage/
+
+# Virtual environments and local Python config
 .python-version
-venv/
 .venv/
+venv/
 env/
+ENV/
+env.bak/
+venv.bak/
+.pdm-python
+.pdm-build/
+.pixi
+__pypackages__/
 
 # Environment files
 .env
 .env.*
 !.env.example
+.envrc
 
-# Editors and IDEs
+# Logs and scratch files
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+**/tempCodeRunnerFile.py
+
+# Notebook and local state
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
+
+# Type checkers and debug output
+.pyre/
+.pytype/
+cython_debug/
+dmypy.json
+.dmypy.json
+
+# Editors and local tooling
 .idea/
 .vscode/
 .codex
 .codex/
+.abstra/
+.cursorignore
+.cursorindexingignore
 *.swp
 *.swo
+
+# App-specific local files
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
 
 # Next.js / Node
 frontend/node_modules/
@@ -40,12 +104,7 @@ frontend/.next/
 frontend/out/
 frontend/.turbo/
 frontend/.vercel/
-coverage/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Local scratch files
-**/tempCodeRunnerFile.py
-*.log
