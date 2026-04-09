@@ -1,0 +1,18 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    %% Title
+    classDef title fill:none,stroke:none,font-size:20px,font-weight:bold;
+    Title["Level 0 Data Flow Diagram - Context Diagram"]:::title
+
+    %% External Entities
+    User["Applicant / User"]
+
+    %% Main Process
+    System(("ATS Resume Scanner<br/>System"))
+
+    %% Data Flows
+    User -- "PDF Resume + Job Description" --> System
+    User -- "Role Query (for Synthetic JD)" --> System
+
+    System -- "Final Score, Breakdown & Feedback" --> User
+    System -- "Generated Synthetic JD" --> User

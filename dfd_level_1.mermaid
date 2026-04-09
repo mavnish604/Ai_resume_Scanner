@@ -1,0 +1,38 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    %% Title
+    classDef title fill:none,stroke:none,font-size:20px,font-weight:bold;
+    Title["Level 1 Data Flow Diagram"]:::title
+
+    %% External Entities
+    User["User"]
+    WebSearch["DuckDuckGo Search API"]
+    LLM_APIs["LLM Inference APIs<br/>HuggingFace, Groq, Sarvam"]
+
+    %% Processes
+    P1(("1.0<br/>Generate<br/>Synthetic JD"))
+    P2(("2.0<br/>Process PDF<br/>Upload"))
+    P3(("3.0<br/>Evaluate<br/>Resume"))
+
+    %% Data Stores
+    D1[("Temporary File<br/>System")]
+
+    %% Data Flows: Feature 1 (JD Generation)
+    User -- "Target Role Name" --> P1
+    P1 -- "Search Query" --> WebSearch
+    WebSearch -- "Real Job Postings" --> P1
+    P1 -- "Search Context + System Prompts" --> LLM_APIs
+    LLM_APIs -- "Synthesized JD" --> P1
+    P1 -- "Generated Synthetic JD Text" --> User
+
+    %% Data Flows: Feature 2 (Resume Processing)
+    User -- "PDF Resume File" --> P2
+    P2 -- "File Upload Stream" --> D1
+    
+    User -- "Job Description Text" --> P3
+    D1 -- "Saved Temp. PDF Path" --> P3
+    
+    P3 -- "Prompts / Text / Base64 Images" --> LLM_APIs
+    LLM_APIs -- "Scores, Overview & Improvements" --> P3
+    
+    P3 -- "Final Score & Combined Report" --> User

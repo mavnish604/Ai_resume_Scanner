@@ -1,0 +1,158 @@
+%%{init: {'theme': 'dark'}}%%
+classDiagram
+    direction TB
+
+    %% ════════════════════════════════════════════
+    %% API Layer
+    %% ════════════════════════════════════════════
+    class FastAPI_App {
+        <<api/main.py>>
+        +POST /generate-ATS()
+        +POST /evalute-structures()
+        +POST /semantic-score()
+        +POST /generate-jd()
+        +POST /final-score()
+        -_save_upload(pdf_file) str
+    }
+
+    class SemanticScoringRequest {
+        <<api/schemas.py>>
+        +str job_description
+    }
+
+    %% ════════════════════════════════════════════
+    %% LLMs Package
+    %% ════════════════════════════════════════════
+    class CustomSarvamChat {
+        <<LLMs/Sarvam_Wrapper.py>>
+        +str api_subscription_key
+        +str model
+        +_generate(messages, stop, run_manager) ChatResult
+        +_llm_type() str
+    }
+
+    class BaseChatModel {
+        <<langchain_core>>
+    }
+
+    class Models {
+        <<LLMs/models.py>>
+        +HuggingFaceEndpoint llm
+        +ChatGroq lama70b
+        +ChatGroq gptOSS120b
+        +ChatHuggingFace DeepseekR1
+        +ChatGroq metaVLM
+        +CustomSarvamChat Indus
+    }
+
+    class JDGenerator {
+        <<LLMs/jd_generator.py>>
+        +InferenceClient _client
+        +str HF_MODEL
+        -_search_job_postings(role, max_results) str
+        +generate_synthetic_jd(role) str
+    }
+
+    %% ════════════════════════════════════════════
+    %% LLM Judge Package
+    %% ════════════════════════════════════════════
+    class Review {
+        <<LLM_Judge/Structure_schema_LLM.py>>
+        +str general_overview
+        +int score
+        +str scope_of_improvement
+    }
+
+    class LLM_Scorer {
+        <<LLM_Judge/LLM_Scorer.py>>
+        +RunnableSequence chain1
+        +RunnableSequence chain2
+        +RunnableSequence chain3
+        +PromptTemplate eval_prompt
+        +PromptTemplate summary_prompt
+        +RunnableSequence summary_chain
+        +run_ensemble_evaluation(resume_text, jd_text) dict
+    }
+
+    %% ════════════════════════════════════════════
+    %% Semantic Scorer Package
+    %% ════════════════════════════════════════════
+    class Score {
+        <<Semantic_Scorer/generate_semantic_score.py>>
+        +str role
+        +str resume_path
+    }
+
+    class SemanticScorer {
+        <<Semantic_Scorer>>
+        +SentenceTransformer model
+        +cal_semantic_score(role, desc) float
+        +get_text(path) list
+        +combined_text(path) str
+        +gen_sem_score(resume_path, role) float
+        +StructuredTool Semantic_Score_Tool
+    }
+
+    %% ════════════════════════════════════════════
+    %% VLM Structure Judge Package
+    %% ════════════════════════════════════════════
+    class ResumeEvalutionVLM {
+        <<VLM_structure_Judge/visualSchema.py>>
+        +int Score
+        +str Feedback
+    }
+
+    class StructureScorer {
+        <<VLM_structure_Judge>>
+        +evaluate_resume_layout(pdf_path) dict
+        +pil_image_to_base64(img) str
+    }
+
+    %% ════════════════════════════════════════════
+    %% Pydantic BaseModel (external)
+    %% ════════════════════════════════════════════
+    class BaseModel {
+        <<pydantic>>
+    }
+
+    %% ════════════════════════════════════════════
+    %% Inheritance
+    %% ════════════════════════════════════════════
+    BaseChatModel <|-- CustomSarvamChat : extends
+    BaseModel <|-- Review : extends
+    BaseModel <|-- Score : extends
+    BaseModel <|-- SemanticScoringRequest : extends
+    BaseModel <|-- ResumeEvalutionVLM : extends
+
+    %% ════════════════════════════════════════════
+    %% Composition / Dependencies
+    %% ════════════════════════════════════════════
+    Models --> CustomSarvamChat : creates Indus
+    Models ..> JDGenerator : not used directly
+
+    FastAPI_App --> LLM_Scorer : calls run_ensemble_evaluation
+    FastAPI_App --> SemanticScorer : calls gen_sem_score
+    FastAPI_App --> StructureScorer : calls evaluate_resume_layout
+    FastAPI_App --> JDGenerator : calls generate_synthetic_jd
+
+    LLM_Scorer --> Models : uses lama70b, gptOSS120b, Indus
+    LLM_Scorer --> Review : structured output schema
+    LLM_Scorer ..> SemanticScorer : uses combined_text
+
+    StructureScorer --> Models : uses metaVLM
+    StructureScorer --> ResumeEvalutionVLM : structured output schema
+
+    JDGenerator --> DDGS : web search
+    JDGenerator --> InferenceClient : HuggingFace API
+
+    SemanticScorer --> Score : args_schema for tool
+
+    class DDGS {
+        <<duckduckgo_search>>
+        +text(query, max_results) list
+    }
+
+    class InferenceClient {
+        <<huggingface_hub>>
+        +chat_completion(messages, max_tokens, temperature) Response
+    }

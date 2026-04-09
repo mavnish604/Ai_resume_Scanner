@@ -1,0 +1,74 @@
+%%{init: {'theme': 'dark'}}%%
+flowchart TD
+    %% Styling for start/end and synchronization nodes
+    classDef startEnd fill:#2d3748,stroke:#4fd1c5,stroke-width:2px,color:#fff;
+    classDef forkJoin fill:#4a5568,stroke:#a0aec0,stroke-width:4px,color:#fff;
+
+    Start([Start Dashboard])
+    CheckAction{Action Selection}
+    Start --> CheckAction
+
+    %% PATH 1: JD generation
+    InputRole[/User inputs or selects a role/]
+    CheckAction -- "Generate JD" --> InputRole
+
+    Search["DuckDuckGo searches web for<br/>recent role postings"]
+    InputRole --> Search
+
+    Synthesize["HuggingFace (Qwen) synthesizes<br/>a realistic Job Description"]
+    Search --> Synthesize
+
+    Autofill[/Populate Job Description textbox UI/]
+    Synthesize --> Autofill
+    Autofill --> InputJD
+
+    %% PATH 2: Main analysis flow
+    InputJD[/User provides Job Description<br/>and uploads PDF Resume/]
+    CheckAction -- "Manual JD + Upload" --> InputJD
+
+    Submit[User submits for analysis]
+    InputJD --> Submit
+
+    Fork[Parallel Processing Fork]
+    Submit --> Fork
+
+    %% Branch 1: Semantic scoring
+    ExtractSemText["Extract Text via PyPDF"]
+    Fork --> ExtractSemText
+    ScoreSemantic["Calculate Cosine Similarity<br/>all-MiniLM-L6-v2"]
+    ExtractSemText --> ScoreSemantic
+
+    %% Branch 2: Visual structure scoring
+    ExtractImage["Convert PDF Page 1 to Base64"]
+    Fork --> ExtractImage
+    ScoreStructure["Meta VLM evaluates layout,<br/>formatting, and readability"]
+    ExtractImage --> ScoreStructure
+
+    %% Branch 3: LLM ensemble review
+    ExtractLLMText["Extract Text via PyPDF"]
+    Fork --> ExtractLLMText
+    RunEnsemble["3 parallel LLM Reviews:<br/>Llama70B, GPT-OSS-120B, Llama70B"]
+    ExtractLLMText --> RunEnsemble
+    WaitReview["Await 3 structured<br/>reviews<br/>(Score + Overview + Improvement)"]
+    RunEnsemble --> WaitReview
+    RunSummary["Sarvam Indus summarizes<br/>the 3 reviews"]
+    WaitReview --> RunSummary
+
+    %% Join concurrent executions
+    Join[Synchronization Join]
+    ScoreSemantic -- "Semantic Score (10%)" --> Join
+    ScoreStructure -- "Structure Score (20%)<br/>+ Feedback JSON" --> Join
+    RunSummary -- "Avg LLM Score (70%)<br/>+ Overall Summaries" --> Join
+
+    %% Final aggregation
+    CalcFinal["Calculate final weighted score<br/>and format final payload"]
+    Join --> CalcFinal
+
+    Render[/Render Results UI<br/>Score Rings and Feedback Details/]
+    CalcFinal --> Render
+
+    End([End])
+    Render --> End
+
+    class Start,End startEnd;
+    class Fork,Join forkJoin;
