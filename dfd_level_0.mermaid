@@ -11,8 +11,8 @@ flowchart TD
     System(("ATS Resume Scanner<br/>System"))
 
     %% Data Flows
-    User -- "PDF Resume + Job Description" --> System
+    User -- "PDF Resume Set + Job Description" --> System
     User -- "Role Query (for Synthetic JD)" --> System
 
-    System -- "Final Score, Breakdown & Feedback" --> User
+    System -- "Ranked Candidate Leaderboard,<br/>Final Scores, Breakdown and Feedback" --> User
     System -- "Generated Synthetic JD" --> User

@@ -11,11 +11,13 @@ flowchart TD
 
     %% Processes
     P1(("1.0<br/>Generate<br/>Synthetic JD"))
-    P2(("2.0<br/>Process PDF<br/>Upload"))
-    P3(("3.0<br/>Evaluate<br/>Resume"))
+    P2(("2.0<br/>Process PDF<br/>Upload Batch"))
+    P3(("3.0<br/>Evaluate<br/>Each Resume"))
+    P4(("4.0<br/>Rank Candidates<br/>and Return Results"))
 
     %% Data Stores
     D1[("Temporary File<br/>System")]
+    D2[("Ranked Candidate<br/>Results")]
 
     %% Data Flows: Feature 1 (JD Generation)
     User -- "Target Role Name" --> P1
@@ -25,14 +27,16 @@ flowchart TD
     LLM_APIs -- "Synthesized JD" --> P1
     P1 -- "Generated Synthetic JD Text" --> User
 
-    %% Data Flows: Feature 2 (Resume Processing)
-    User -- "PDF Resume File" --> P2
-    P2 -- "File Upload Stream" --> D1
+    %% Data Flows: Feature 2 (Resume Batch Processing)
+    User -- "PDF Resume Files / Folder Upload" --> P2
+    P2 -- "Validated PDF Streams" --> D1
     
     User -- "Job Description Text" --> P3
-    D1 -- "Saved Temp. PDF Path" --> P3
+    D1 -- "Saved Temp PDF Paths" --> P3
     
     P3 -- "Prompts / Text / Base64 Images" --> LLM_APIs
     LLM_APIs -- "Scores, Overview & Improvements" --> P3
-    
-    P3 -- "Final Score & Combined Report" --> User
+
+    P3 -- "Candidate Score Payloads" --> D2
+    D2 -- "Scored Candidate Set" --> P4
+    P4 -- "Ranked Leaderboard + Detailed Reports" --> User

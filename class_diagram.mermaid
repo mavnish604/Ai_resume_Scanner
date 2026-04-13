@@ -2,9 +2,9 @@
 classDiagram
     direction TB
 
-    %% ════════════════════════════════════════════
+    %%
     %% API Layer
-    %% ════════════════════════════════════════════
+    %%
     class FastAPI_App {
         <<api/main.py>>
         +POST /generate-ATS()
@@ -12,7 +12,9 @@ classDiagram
         +POST /semantic-score()
         +POST /generate-jd()
         +POST /final-score()
+        +POST /batch-score()
         -_save_upload(pdf_file) str
+        -_process_single_resume(tmp_path, job_description) dict
     }
 
     class SemanticScoringRequest {
@@ -20,9 +22,9 @@ classDiagram
         +str job_description
     }
 
-    %% ════════════════════════════════════════════
+    %%
     %% LLMs Package
-    %% ════════════════════════════════════════════
+    %%
     class CustomSarvamChat {
         <<LLMs/Sarvam_Wrapper.py>>
         +str api_subscription_key
@@ -53,9 +55,9 @@ classDiagram
         +generate_synthetic_jd(role) str
     }
 
-    %% ════════════════════════════════════════════
+    %%
     %% LLM Judge Package
-    %% ════════════════════════════════════════════
+    %%
     class Review {
         <<LLM_Judge/Structure_schema_LLM.py>>
         +str general_overview
@@ -74,9 +76,9 @@ classDiagram
         +run_ensemble_evaluation(resume_text, jd_text) dict
     }
 
-    %% ════════════════════════════════════════════
+    %%
     %% Semantic Scorer Package
-    %% ════════════════════════════════════════════
+    %%
     class Score {
         <<Semantic_Scorer/generate_semantic_score.py>>
         +str role
@@ -84,18 +86,26 @@ classDiagram
     }
 
     class SemanticScorer {
-        <<Semantic_Scorer>>
-        +SentenceTransformer model
-        +cal_semantic_score(role, desc) float
-        +get_text(path) list
-        +combined_text(path) str
+        <<Semantic_Scorer/generate_semantic_score.py>>
         +gen_sem_score(resume_path, role) float
         +StructuredTool Semantic_Score_Tool
     }
 
-    %% ════════════════════════════════════════════
+    class ExtractText {
+        <<Semantic_Scorer/extract_text.py>>
+        +get_text(path) list
+        +combined_text(path) str
+    }
+
+    class CompareCosSimilarity {
+        <<Semantic_Scorer/compare_cos_similarity.py>>
+        +SentenceTransformer model
+        +cal_semantic_score(role, desc) float
+    }
+
+    %%
     %% VLM Structure Judge Package
-    %% ════════════════════════════════════════════
+    %%
     class ResumeEvalutionVLM {
         <<VLM_structure_Judge/visualSchema.py>>
         +int Score
@@ -108,36 +118,35 @@ classDiagram
         +pil_image_to_base64(img) str
     }
 
-    %% ════════════════════════════════════════════
+    %%
     %% Pydantic BaseModel (external)
-    %% ════════════════════════════════════════════
+    %%
     class BaseModel {
         <<pydantic>>
     }
 
-    %% ════════════════════════════════════════════
+    %%
     %% Inheritance
-    %% ════════════════════════════════════════════
+    %%
     BaseChatModel <|-- CustomSarvamChat : extends
     BaseModel <|-- Review : extends
     BaseModel <|-- Score : extends
     BaseModel <|-- SemanticScoringRequest : extends
     BaseModel <|-- ResumeEvalutionVLM : extends
 
-    %% ════════════════════════════════════════════
+    %%
     %% Composition / Dependencies
-    %% ════════════════════════════════════════════
+    %%
     Models --> CustomSarvamChat : creates Indus
-    Models ..> JDGenerator : not used directly
 
     FastAPI_App --> LLM_Scorer : calls run_ensemble_evaluation
     FastAPI_App --> SemanticScorer : calls gen_sem_score
     FastAPI_App --> StructureScorer : calls evaluate_resume_layout
     FastAPI_App --> JDGenerator : calls generate_synthetic_jd
+    FastAPI_App --> ExtractText : calls combined_text
 
     LLM_Scorer --> Models : uses lama70b, gptOSS120b, Indus
     LLM_Scorer --> Review : structured output schema
-    LLM_Scorer ..> SemanticScorer : uses combined_text
 
     StructureScorer --> Models : uses metaVLM
     StructureScorer --> ResumeEvalutionVLM : structured output schema
@@ -146,6 +155,8 @@ classDiagram
     JDGenerator --> InferenceClient : HuggingFace API
 
     SemanticScorer --> Score : args_schema for tool
+    SemanticScorer --> ExtractText : uses combined_text
+    SemanticScorer --> CompareCosSimilarity : uses cal_semantic_score
 
     class DDGS {
         <<duckduckgo_search>>

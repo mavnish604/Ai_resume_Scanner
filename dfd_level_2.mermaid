@@ -2,7 +2,7 @@
 flowchart TD
     %% Title
     classDef title fill:none,stroke:none,font-size:20px,font-weight:bold;
-    Title["Level 2 Data Flow Diagram - Process 3.0 Evaluate Resume Details"]:::title
+    Title["Level 2 Data Flow Diagram - Process 3.0 Evaluate Each Resume"]:::title
 
     %% External Entities & Stores
     User["User"]
@@ -41,4 +41,4 @@ flowchart TD
     LLM_APIs -- "Final Sub-Summary" --> P35
     P35 -- "Ensemble Avg Score (70%) + All Feedback" --> P36
 
-    P36 -- "Aggregated JSON Payload Display" --> User
+    P36 -- "Candidate JSON Payload" --> User

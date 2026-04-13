@@ -4,7 +4,7 @@ flowchart TD
     classDef startEnd fill:#2d3748,stroke:#4fd1c5,stroke-width:2px,color:#fff;
     classDef forkJoin fill:#4a5568,stroke:#a0aec0,stroke-width:4px,color:#fff;
 
-    Start([Start Dashboard])
+    Start([Open Resume Scanner])
     CheckAction{Action Selection}
     Start --> CheckAction
 
@@ -18,19 +18,22 @@ flowchart TD
     Synthesize["HuggingFace (Qwen) synthesizes<br/>a realistic Job Description"]
     Search --> Synthesize
 
-    Autofill[/Populate Job Description textbox UI/]
+    Autofill[/Populate Job Description field/]
     Synthesize --> Autofill
     Autofill --> InputJD
 
     %% PATH 2: Main analysis flow
-    InputJD[/User provides Job Description<br/>and uploads PDF Resume/]
-    CheckAction -- "Manual JD + Upload" --> InputJD
+    InputJD[/User provides Job Description<br/>and uploads PDF resumes or a resume folder/]
+    CheckAction -- "Provide JD + Upload Resumes" --> InputJD
 
-    Submit[User submits for analysis]
+    Submit[User starts batch analysis]
     InputJD --> Submit
 
+    BatchLoop[Iterate over each uploaded PDF]
+    Submit --> BatchLoop
+
     Fork[Parallel Processing Fork]
-    Submit --> Fork
+    BatchLoop --> Fork
 
     %% Branch 1: Semantic scoring
     ExtractSemText["Extract Text via PyPDF"]
@@ -60,12 +63,20 @@ flowchart TD
     ScoreStructure -- "Structure Score (20%)<br/>+ Feedback JSON" --> Join
     RunSummary -- "Avg LLM Score (70%)<br/>+ Overall Summaries" --> Join
 
-    %% Final aggregation
-    CalcFinal["Calculate final weighted score<br/>and format final payload"]
+    %% Final aggregation per resume
+    CalcFinal["Calculate final weighted score<br/>and format candidate payload"]
     Join --> CalcFinal
 
-    Render[/Render Results UI<br/>Score Rings and Feedback Details/]
-    CalcFinal --> Render
+    Collect[Append candidate result<br/>to ranked candidate list]
+    CalcFinal --> Collect
+    Collect --> MoreFiles{More PDFs?}
+    MoreFiles -- "Yes" --> BatchLoop
+
+    SortRank["Sort candidates by final score"]
+    MoreFiles -- "No" --> SortRank
+
+    Render[/Render leaderboard UI<br/>with score rings and feedback details/]
+    SortRank --> Render
 
     End([End])
     Render --> End
