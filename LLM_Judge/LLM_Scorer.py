@@ -13,6 +13,7 @@ eval_prompt = PromptTemplate(
     template="""
     You are an expert technical recruiter. Evaluate this resume against the job description.
     Provide a general overview, a strict score from 0-100, and areas for improvement.
+    Use plain professional text only. Do not use emojis or decorative symbols.
     
     Job Description: {job_description}
     Resume: {resume_text}
@@ -36,6 +37,7 @@ summary_prompt = PromptTemplate(
     Summarize the following reviewer feedback into:
     1. A concise unified overall resume assessment
     2. A concise unified improvement recommendation list
+    Use plain professional text only. Do not use emojis or decorative symbols.
 
     Overviews:
     {overviews}

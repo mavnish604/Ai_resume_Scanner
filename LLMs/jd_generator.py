@@ -51,7 +51,8 @@ def generate_synthetic_jd(role: str) -> str:
                 "description. Include: Job Title, Company Overview (make up a realistic "
                 "tech company), Responsibilities, Required Qualifications, Preferred "
                 "Qualifications, and Benefits. Make it professional and detailed. "
-                "Do NOT mention that you used web search. Write it as if it is a real "
+                "Do NOT mention that you used web search. Do not use emojis or decorative symbols. "
+                "Write it as if it is a real "
                 "job posting."
             ),
         },

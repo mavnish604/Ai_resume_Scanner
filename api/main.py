@@ -1,6 +1,7 @@
 import os
 import tempfile
 import concurrent.futures
+from typing import List
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -115,53 +116,54 @@ async def generateJd(role: str = Form(...)):
         raise HTTPException(status_code=500, detail=f"JD generation failed: {str(e)}")
 
 
+def _process_single_resume(tmp_path: str, job_description: str) -> dict:
+    """Helper: Runs all 3 scorers concurrently for a single resume and returns final dict."""
+    resume_text = combined_text(tmp_path)
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        sem_future = executor.submit(gen_sem_score, resume_path=tmp_path, role=job_description)
+        struct_future = executor.submit(evaluate_resume_layout, tmp_path)
+        llm_future = executor.submit(
+            run_ensemble_evaluation, resume_text=resume_text, jd_text=job_description
+        )
+
+    semantic_raw = sem_future.result()
+    semantic_score = round(semantic_raw * 100, 2)
+    structure_result = struct_future.result()
+    llm_result = llm_future.result()
+
+    structure_score = structure_result.get("Score", 0)
+    llm_avg_score = llm_result.get("final_average_score", 0)
+
+    # Weighted combination: 70% LLM + 20% structure + 10% semantic
+    final_score = round(
+        0.10 * semantic_score + 0.20 * structure_score + 0.70 * llm_avg_score, 2
+    )
+
+    return {
+        "final_score": final_score,
+        "semantic_score": semantic_score,
+        "structure_score": structure_score,
+        "structure_feedback": structure_result.get("Feedback", ""),
+        "llm_avg_score": llm_avg_score,
+        "llm_individual_scores": llm_result.get("individual_scores", []),
+        "llm_overviews": llm_result.get("all_general_overviews", []),
+        "llm_improvements": llm_result.get("all_improvements", []),
+        "llm_summary": llm_result.get("final_summary", ""),
+    }
+
+
 # ─── POST /final-score ──────────────────────────────────────────────────
 @app.post("/final-score")
 async def getFinalScore(
     pdf_file: UploadFile = File(...),
     job_description: str = Form(...)
 ):
-    """
-    Runs all three scorers concurrently and returns a weighted final score:
-    70% LLM ensemble + 20% structure + 10% semantic.
-    """
+    """Runs all 3 scorers on a single resume and returns a weighted final score."""
     tmp_path = None
     try:
         tmp_path = await _save_upload(pdf_file)
-        resume_text = combined_text(tmp_path)
-
-        # Run all three scorers in parallel
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            sem_future = executor.submit(gen_sem_score, resume_path=tmp_path, role=job_description)
-            struct_future = executor.submit(evaluate_resume_layout, tmp_path)
-            llm_future = executor.submit(
-                run_ensemble_evaluation, resume_text=resume_text, jd_text=job_description
-            )
-
-        semantic_raw = sem_future.result()
-        semantic_score = round(semantic_raw * 100, 2)
-        structure_result = struct_future.result()
-        llm_result = llm_future.result()
-
-        structure_score = structure_result.get("Score", 0)
-        llm_avg_score = llm_result.get("final_average_score", 0)
-
-        # Weighted combination: 70% LLM + 20% structure + 10% semantic
-        final_score = round(
-            0.10 * semantic_score + 0.20 * structure_score + 0.70 * llm_avg_score, 2
-        )
-
-        return {
-            "final_score": final_score,
-            "semantic_score": semantic_score,
-            "structure_score": structure_score,
-            "structure_feedback": structure_result.get("Feedback", ""),
-            "llm_avg_score": llm_avg_score,
-            "llm_individual_scores": llm_result.get("individual_scores", []),
-            "llm_overviews": llm_result.get("all_general_overviews", []),
-            "llm_improvements": llm_result.get("all_improvements", []),
-            "llm_summary": llm_result.get("final_summary", ""),
-        }
+        return _process_single_resume(tmp_path, job_description)
 
     except HTTPException:
         raise
@@ -170,3 +172,40 @@ async def getFinalScore(
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+# ─── POST /batch-score ──────────────────────────────────────────────────
+@app.post("/batch-score")
+async def getBatchScore(
+    pdf_files: List[UploadFile] = File(...),
+    job_description: str = Form(...)
+):
+    """
+    Sequentially processes a list of uploaded PDF resumes against a single JD.
+    Returns a ranking sorted by final score.
+    """
+    results = []
+    
+    for pdf_file in pdf_files:
+        if not pdf_file.filename.lower().endswith(".pdf"):
+            continue
+            
+        tmp_path = None
+        try:
+            tmp_path = await _save_upload(pdf_file)
+            res = _process_single_resume(tmp_path, job_description)
+            res["filename"] = pdf_file.filename
+            results.append(res)
+        except Exception as e:
+            results.append({
+                "filename": pdf_file.filename,
+                "error": str(e),
+                "final_score": -1
+            })
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    # Sort results descending by final_score (errors with -1 drop to the bottom)
+    results.sort(key=lambda x: x.get("final_score", -1), reverse=True)
+    return {"ranked_candidates": results}

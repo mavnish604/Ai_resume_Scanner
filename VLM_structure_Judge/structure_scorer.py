@@ -20,6 +20,7 @@ def evaluate_resume_layout(pdf_path: str) -> dict:
                     "You are an expert technical recruiter and resume layout judge. "
                     "Review the attached image of a resume. Do NOT evaluate the skills or experience. "
                     "Strictly evaluate the VISUAL STRUCTURE, FORMATTING, and READABILITY.\n\n"
+                    "Use plain professional text only. Do not use emojis or decorative symbols.\n\n"
                     "Return a JSON object with exactly two keys:\n"
                     "  - \"Score\": an integer from 0 to 100 (0 = extremely bad layout, 100 = excellent layout)\n"
                     "  - \"Feedback\": a string describing where the resume can be improved structure-wise"

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from "react";
 
 const API_BASE = "http://localhost:8000";
 const MODEL_NAMES = ["Llama 70B", "GPT-OSS 120B", "Llama 70B v2"];
+const EMOJI_REGEX = /[\p{Extended_Pictographic}\u200D\uFE0F]/gu;
 const ROLE_SUGGESTIONS = [
   "Full Stack Engineer",
   "Frontend Developer",
@@ -18,6 +19,28 @@ const ROLE_SUGGESTIONS = [
   "Data Engineer",
   "AI Research Scientist",
 ];
+
+function stripEmojis(value = "") {
+  if (typeof value !== "string") return "";
+  return value.replace(EMOJI_REGEX, "").trim();
+}
+
+function sanitizeCandidate(candidate) {
+  if (!candidate || typeof candidate !== "object") return candidate;
+
+  return {
+    ...candidate,
+    filename: stripEmojis(candidate.filename || ""),
+    error: stripEmojis(candidate.error || ""),
+    structure_feedback: stripEmojis(candidate.structure_feedback || ""),
+    llm_summary: stripEmojis(candidate.llm_summary || ""),
+    llm_improvements: Array.isArray(candidate.llm_improvements)
+      ? candidate.llm_improvements
+          .map((item) => stripEmojis(item || ""))
+          .filter(Boolean)
+      : [],
+  };
+}
 
 /* ── Animated circular score ring ─────────────────────── */
 function ScoreRing({ value, size = 160, stroke = 8, color = "url(#grad)" }) {
@@ -78,7 +101,7 @@ function MiniScoreRing({ value, size = 90, stroke = 5, color }) {
 }
 
 export default function Home() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [jd, setJd] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -86,29 +109,31 @@ export default function Home() {
   const [dragging, setDragging] = useState(false);
   const [selectedRole, setSelectedRole] = useState("");
   const [generatingJd, setGeneratingJd] = useState(false);
+  const [expandedIndex, setExpandedIndex] = useState(null);
   const fileInput = useRef(null);
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setDragging(false);
-    const dropped = e.dataTransfer.files[0];
-    if (dropped && dropped.name.toLowerCase().endsWith(".pdf")) {
-      setFile(dropped);
+    const dropped = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
+    if (dropped.length > 0) {
+      setFiles((prev) => [...prev, ...dropped]);
     }
   }, []);
 
   const handleSubmit = async () => {
-    if (!file || !jd.trim()) return;
+    if (files.length === 0 || !jd.trim()) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setExpandedIndex(null);
 
     const formData = new FormData();
-    formData.append("pdf_file", file);
+    files.forEach((f) => formData.append("pdf_files", f));
     formData.append("job_description", jd);
 
     try {
-      const res = await fetch(`${API_BASE}/final-score`, {
+      const res = await fetch(`${API_BASE}/batch-score`, {
         method: "POST",
         body: formData,
       });
@@ -117,9 +142,14 @@ export default function Home() {
         throw new Error(err.detail || `Server returned ${res.status}`);
       }
       const data = await res.json();
-      setResult(data);
+      setResult({
+        ...data,
+        ranked_candidates: Array.isArray(data.ranked_candidates)
+          ? data.ranked_candidates.map(sanitizeCandidate)
+          : [],
+      });
     } catch (e) {
-      setError(e.message);
+      setError(stripEmojis(e.message));
     } finally {
       setLoading(false);
     }
@@ -141,9 +171,9 @@ export default function Home() {
         throw new Error(err.detail || `Server returned ${res.status}`);
       }
       const data = await res.json();
-      setJd(data.job_description || "");
+      setJd(stripEmojis(data.job_description || ""));
     } catch (e) {
-      setError(e.message);
+      setError(stripEmojis(e.message));
     } finally {
       setGeneratingJd(false);
     }
@@ -152,129 +182,120 @@ export default function Home() {
   const reset = () => {
     setResult(null);
     setError(null);
-    setFile(null);
+    setFiles([]);
     setJd("");
     setSelectedRole("");
     setGeneratingJd(false);
+    setExpandedIndex(null);
   };
 
   /* ── Results view ────────────────────────── */
-  if (result) {
+  if (result && result.ranked_candidates) {
     return (
-      <div className="container">
+      <div className="container" style={{ maxWidth: "1000px" }}>
         <button className="back-btn" onClick={reset}>
-          ← New Scan
+          New Scan
         </button>
-
-        {/* Final Score */}
-        <div className="final-score-card">
-          <ScoreRing value={Math.round(result.final_score)} />
-          <div className="score-label">Final ATS Score</div>
+        <div className="leaderboard-header" style={{ textAlign: "center", marginBottom: "32px" }}>
+          <h2 style={{ fontSize: "2.2rem", color: "var(--accent-cyan)", marginBottom: "8px" }}>Candidate Leaderboard</h2>
+          <p style={{ color: "var(--text-secondary)" }}>Ranked by final ATS Score against Job Description</p>
         </div>
 
-        {/* Three sub-scores */}
-        <div className="score-grid">
-          <div className="glass-card score-card">
-            <MiniScoreRing value={Math.round(result.llm_avg_score)} color="#8b5cf6" />
-            <div className="score-card-title">LLM Score (70%)</div>
-          </div>
-          <div className="glass-card score-card">
-            <MiniScoreRing value={Math.round(result.structure_score)} color="#00d4ff" />
-            <div className="score-card-title">Structure (20%)</div>
-          </div>
-          <div className="glass-card score-card">
-            <MiniScoreRing value={Math.round(result.semantic_score)} color="#10b981" />
-            <div className="score-card-title">Semantic (10%)</div>
-          </div>
-        </div>
+        <div className="leaderboard-list">
+          {result.ranked_candidates.map((candidate, idx) => {
+            const isExpanded = expandedIndex === idx;
 
-        {/* Individual LLM Scores */}
-        {result.llm_individual_scores && result.llm_individual_scores.length > 0 && (
-          <div className="glass-card feedback-card">
-            <h3>
-              <span className="icon">🤖</span>
-              <span className="tag-purple">Individual Model Scores</span>
-            </h3>
-            <div className="llm-scores-grid">
-              {result.llm_individual_scores.map((score, i) => (
-                <div key={i} className="llm-individual-card">
-                  <div className="model-name">{MODEL_NAMES[i] || `Model ${i + 1}`}</div>
-                  <div className="model-score">{score}</div>
+            if (candidate.error) {
+              return (
+                <div key={idx} className="glass-card leaderboard-item error-item" style={{ marginBottom: "16px", padding: "20px" }}>
+                  <div className="leaderboard-summary" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <div className="rank" style={{ fontSize: "1.2rem", fontWeight: "bold", opacity: 0.5 }}>#{idx + 1}</div>
+                    <div className="candidate-info" style={{ flex: 1 }}>
+                      <h4 style={{ fontSize: "1.1rem", margin: "0 0 4px" }}>{candidate.filename || "Resume"}</h4>
+                      <span className="error-text" style={{ color: "#ef4444", fontSize: "0.9rem" }}>{candidate.error || "Unable to process this file."}</span>
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              );
+            }
 
-        {/* LLM Overviews */}
-        {result.llm_overviews && result.llm_overviews.length > 0 && (
-          <div className="feedback-section">
-            <div className="glass-card feedback-card">
-              <h3>
-                <span className="icon">📋</span>
-                <span className="tag-cyan">Reviewer Assessments</span>
-              </h3>
-              <div className="overview-list">
-                {result.llm_overviews.map((overview, i) => (
-                  <div key={i} className="overview-item">
-                    <div className="reviewer-tag tag-purple">
-                      {MODEL_NAMES[i] || `Reviewer ${i + 1}`}
-                    </div>
-                    <p>{overview}</p>
+            return (
+              <div key={idx} className={`glass-card leaderboard-item ${isExpanded ? 'expanded' : ''}`} style={{ marginBottom: "16px", padding: "20px", transition: "all 0.3s ease" }}>
+                <div
+                  className="leaderboard-summary"
+                  onClick={() => setExpandedIndex(isExpanded ? null : idx)}
+                  style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: "20px" }}
+                >
+                  <div className="rank" style={{ fontSize: "1.8rem", fontWeight: "900", color: idx === 0 ? "var(--accent-pink)" : "var(--accent-purple)", width: "50px", textAlign: "center" }}>
+                    #{idx + 1}
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* LLM Improvements */}
-        {result.llm_improvements && result.llm_improvements.length > 0 && (
-          <div className="feedback-section">
-            <div className="glass-card feedback-card">
-              <h3>
-                <span className="icon">🚀</span>
-                <span className="tag-orange">Improvement Suggestions</span>
-              </h3>
-              <div className="overview-list">
-                {result.llm_improvements.map((improvement, i) => (
-                  <div key={i} className="overview-item">
-                    <div className="reviewer-tag tag-orange">
-                      {MODEL_NAMES[i] || `Reviewer ${i + 1}`}
-                    </div>
-                    <p>{improvement}</p>
+                  <div className="candidate-info" style={{ flex: 1 }}>
+                    <h4 style={{ fontSize: "1.15rem", margin: "0", color: "var(--text-primary)" }}>{candidate.filename || "Resume"}</h4>
                   </div>
-                ))}
+                  <div className="candidate-score" style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+                    <MiniScoreRing value={Math.round(candidate.final_score)} color="#ec4899" size={60} stroke={5} />
+                    <span className="expand-icon" style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>{isExpanded ? 'Collapse' : 'Expand'}</span>
+                  </div>
+                </div>
+
+                {/* Expanded Details */}
+                {isExpanded && (
+                  <div className="expanded-details" style={{ marginTop: "24px", paddingTop: "24px", borderTop: "1px solid var(--glass-border)", animation: "fadeIn 0.3s ease" }}>
+                    {/* Three sub-scores */}
+                    <div className="score-grid" style={{ marginBottom: "24px" }}>
+                      <div className="glass-card score-card" style={{ padding: "16px" }}>
+                        <MiniScoreRing value={Math.round(candidate.llm_avg_score)} color="#8b5cf6" size={70} stroke={5} />
+                        <div className="score-card-title">LLM (70%)</div>
+                      </div>
+                      <div className="glass-card score-card" style={{ padding: "16px" }}>
+                        <MiniScoreRing value={Math.round(candidate.structure_score)} color="#00d4ff" size={70} stroke={5} />
+                        <div className="score-card-title">Structure (20%)</div>
+                      </div>
+                      <div className="glass-card score-card" style={{ padding: "16px" }}>
+                        <MiniScoreRing value={Math.round(candidate.semantic_score)} color="#10b981" size={70} stroke={5} />
+                        <div className="score-card-title">Semantic (10%)</div>
+                      </div>
+                    </div>
+
+                    {/* Unified Summary */}
+                    {candidate.llm_summary && (
+                      <div className="feedback-section" style={{ marginBottom: "16px" }}>
+                        <div className="glass-card feedback-card" style={{ padding: "20px" }}>
+                          <h3 style={{ marginBottom: "12px" }}><span className="tag-pink">AI Summary</span></h3>
+                          <p className="feedback-text">{candidate.llm_summary}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Structure Feedback */}
+                    {candidate.structure_feedback && (
+                      <div className="feedback-section" style={{ marginBottom: "16px" }}>
+                        <div className="glass-card feedback-card" style={{ padding: "20px" }}>
+                          <h3 style={{ marginBottom: "12px" }}><span className="tag-cyan">Layout Feedback</span></h3>
+                          <p className="feedback-text">{candidate.structure_feedback}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Improvements */}
+                    {candidate.llm_improvements && candidate.llm_improvements.length > 0 && (
+                      <div className="feedback-section">
+                        <div className="glass-card feedback-card" style={{ padding: "20px" }}>
+                          <h3 style={{ marginBottom: "12px" }}><span className="tag-orange">Top Improvements</span></h3>
+                          <ul style={{ color: "var(--text-secondary)", fontSize: "0.9rem", paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                            {candidate.llm_improvements.map((imp, i) => (
+                              <li key={i}>{imp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Unified Summary (from Indus) */}
-        {result.llm_summary && (
-          <div className="feedback-section">
-            <div className="glass-card feedback-card">
-              <h3>
-                <span className="icon">✨</span>
-                <span className="tag-pink">AI Summary (Indus 105B)</span>
-              </h3>
-              <p className="feedback-text">{result.llm_summary}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Structure Feedback */}
-        {result.structure_feedback && (
-          <div className="feedback-section">
-            <div className="glass-card feedback-card">
-              <h3>
-                <span className="icon">🎨</span>
-                <span className="tag-cyan">Layout & Structure Feedback</span>
-              </h3>
-              <p className="feedback-text">{result.structure_feedback}</p>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -289,15 +310,15 @@ export default function Home() {
         </div>
         <h1>ATS Resume Analyzer</h1>
         <p>
-          Upload your resume and job description to get an instant AI-powered
-          score with detailed feedback from multiple models.
+          Upload your resumes and job description to get instant AI-powered
+          rankings with detailed feedback from multiple models.
         </p>
       </header>
 
       <div className="glass-card">
         {/* PDF Upload */}
         <div
-          className={`upload-zone ${dragging ? "dragging" : ""} ${file ? "has-file" : ""}`}
+          className={`upload-zone ${dragging ? "dragging" : ""} ${files.length > 0 ? "has-file" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
@@ -307,20 +328,27 @@ export default function Home() {
             ref={fileInput}
             type="file"
             accept=".pdf"
+            multiple
+            webkitdirectory="true"
             hidden
-            onChange={(e) => setFile(e.target.files[0])}
+            onChange={(e) => setFiles(Array.from(e.target.files))}
           />
-          {file ? (
+          <div className="upload-icon"></div>
+          {files.length > 0 ? (
             <>
-              <div className="upload-icon"></div>
-              <h3>File Selected</h3>
-              <div className="file-name">📄 {file.name}</div>
+              <h3 style={{ color: "var(--accent-green)", fontSize: "1.2rem" }}>{files.length} File{files.length > 1 ? 's' : ''} Selected</h3>
+              <p>Click or drag to replace selection</p>
+              <div style={{ marginTop: "12px", maxHeight: "80px", overflowY: "auto", display: "flex", flexWrap: "wrap", gap: "8px", justifyContent: "center" }}>
+                {files.slice(0, 5).map(f => (
+                  <span key={f.name} className="file-name" style={{ margin: 0 }}>{stripEmojis(f.name) || "Unnamed file"}</span>
+                ))}
+                {files.length > 5 && <span className="file-name" style={{ margin: 0, opacity: 0.7 }}>+ {files.length - 5} more</span>}
+              </div>
             </>
           ) : (
             <>
-              <div className="upload-icon">📄</div>
-              <h3>Drop your resume PDF here</h3>
-              <p>or click to browse files</p>
+              <h3>Drop a folder of resumes here</h3>
+              <p>or click to browse a directory (.pdf files)</p>
             </>
           )}
         </div>
@@ -332,13 +360,13 @@ export default function Home() {
             className="jd-textarea"
             placeholder="Paste the full job description here..."
             value={jd}
-            onChange={(e) => setJd(e.target.value)}
+            onChange={(e) => setJd(stripEmojis(e.target.value))}
           />
         </div>
 
         {/* JD Generator */}
         <div className="form-section jd-generator-section">
-          <label className="field-label">🤖 Or generate a JD with AI</label>
+          <label className="field-label">Or generate a JD with AI</label>
           <div className="jd-gen-row">
             <div className="role-input-wrapper">
               <input
@@ -347,7 +375,7 @@ export default function Home() {
                 className="role-input"
                 placeholder="Type or select a role…"
                 value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
+                onChange={(e) => setSelectedRole(stripEmojis(e.target.value))}
               />
               <datalist id="role-suggestions">
                 {ROLE_SUGGESTIONS.map((r) => (
@@ -363,7 +391,7 @@ export default function Home() {
               {generatingJd ? (
                 <><span className="btn-spinner"></span> Generating…</>
               ) : (
-                "✨ Generate JD"
+                "Generate JD"
               )}
             </button>
           </div>
@@ -373,10 +401,10 @@ export default function Home() {
         <div className="form-section">
           <button
             className="submit-btn"
-            disabled={!file || !jd.trim() || loading || generatingJd}
+            disabled={files.length === 0 || !jd.trim() || loading || generatingJd}
             onClick={handleSubmit}
           >
-            {loading ? "Analyzing..." : "⚡ Analyze Resume"}
+            {loading ? `Analyzing ${files.length} resume${files.length > 1 ? 's' : ''}...` : "Rank Recommendations"}
           </button>
         </div>
 
@@ -384,15 +412,15 @@ export default function Home() {
         {loading && (
           <div className="loading-overlay">
             <div className="spinner"></div>
-            <h3>Analyzing your resume...</h3>
-            <p>Running 3 AI models + visual analysis. This may take 30-60 seconds.</p>
+            <h3>Analyzing {files.length} candidate resumes...</h3>
+            <p>Running multi-stage ensemble extraction & scoring. This may take a bit for multiple files.</p>
           </div>
         )}
 
         {/* Error */}
         {error && (
           <div className="error-card">
-            <h3>❌ Analysis Failed</h3>
+            <h3>Analysis Failed</h3>
             <p>{error}</p>
           </div>
         )}

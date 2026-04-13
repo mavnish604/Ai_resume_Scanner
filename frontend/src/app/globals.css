@@ -715,3 +715,71 @@ body {
     flex-direction: column;
   }
 }
+
+/* ── Leaderboard UI ────────────────────────────────── */
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.leaderboard-item {
+  position: relative;
+  overflow: hidden;
+  border-left: 4px solid transparent;
+}
+
+.leaderboard-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--neon-glow);
+  border-left-color: var(--accent-purple);
+}
+
+.leaderboard-item.expanded {
+  border-left-color: var(--accent-pink);
+  transform: translateY(-2px);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.2);
+}
+
+.leaderboard-item.error-item {
+  border-left-color: #ef4444;
+}
+
+.leaderboard-summary:hover .candidate-info h4 {
+  color: var(--accent-cyan);
+}
+
+.expand-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+}
+
+.expanded-details {
+  animation: fadeInDown 0.3s ease forwards;
+}
+
+@keyframes fadeInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* File list override for folder upload */
+.upload-zone .file-name {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
